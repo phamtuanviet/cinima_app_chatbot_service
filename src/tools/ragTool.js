@@ -33,7 +33,7 @@ export async function searchFaqInVectorDB(userQuery) {
 
     // 4. Tìm kiếm Vector (Top-K Similarity Search)
     // limit(3): Chỉ lấy 3 đoạn văn bản có khoảng cách vector gần nhất (nghĩa sát nhất)
-    const results = await table.search(queryVector).limit(3).execute();
+    const results = await table.search(queryVector).limit(3).toArray();
 
     // Nếu không tìm thấy gì (trường hợp DB rỗng)
     if (!results || results.length === 0) {
@@ -52,10 +52,10 @@ export async function searchFaqInVectorDB(userQuery) {
       contextString += `--- \n`;
     });
 
-    console.log(`✅ Tìm thấy ${results.length} tài liệu liên quan.`);
+    console.log(`Tìm thấy ${results.length} tài liệu liên quan.`);
     return contextString;
   } catch (error) {
-    console.error("❌ Lỗi khi truy vấn LanceDB:", error);
+    console.error("Lỗi khi truy vấn LanceDB:", error);
     return "Đã xảy ra lỗi kỹ thuật khi tra cứu cơ sở dữ liệu quy định. Hãy báo khách hàng đợi chút.";
   }
 }

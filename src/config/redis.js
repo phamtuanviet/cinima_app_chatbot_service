@@ -10,8 +10,8 @@ export const redisClient = createClient({
     url: redisUrl
 });
 
-redisClient.on('error', (err) => console.error('❌ Lỗi kết nối Redis:', err));
-redisClient.on('connect', () => console.log('✅ Đã kết nối tới Redis thành công!'));
+redisClient.on('error', (err) => console.error('Lỗi kết nối Redis:', err));
+redisClient.on('connect', () => console.log('Đã kết nối tới Redis thành công!'));
 
 // Khởi động kết nối
 await redisClient.connect();

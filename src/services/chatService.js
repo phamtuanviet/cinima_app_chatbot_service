@@ -69,18 +69,18 @@ function maskDataForLLM(toolName, rawData) {
     try {
         // Xử lý nếu data là danh sách (List)
         if (Array.isArray(rawData)) {
-            const top5 = rawData.slice(0, 5); // Chỉ cho AI đọc 5 kết quả đầu tiên
+            const top10 = rawData.slice(0, 10); // Chỉ cho AI đọc 10 kết quả đầu tiên
             
             if (["search_movies", "get_now_playing", "get_coming_soon"].includes(toolName)) {
-                return top5.map(m => ({ title: m.title, genre: m.genre, ageRating: m.ageRating }));
+                return top10.map(m => ({ title: m.title, genre: m.genre, ageRating: m.ageRating }));
             }
             if (["get_showtimes_by_movie", "get_showtimes_by_cinema"].includes(toolName)) {
-                return top5.map(s => ({ cinema: s.cinemaName, time: s.time, format: s.format }));
+                return top10.map(s => ({ cinema: s.cinemaName, time: s.startTime, format: s.format }));
             }
             if (toolName === "get_cinemas_nearby") {
-                return top5.map(c => ({ name: c.name, address: c.address, distance: c.distance }));
+                return top10.map(c => ({ name: c.name, address: c.address, distance: c.distance }));
             }
-            return top5; // Fallback
+            return top10; // Fallback
         }
         
         // Xử lý nếu data là 1 Object chi tiết
@@ -98,10 +98,9 @@ function maskDataForLLM(toolName, rawData) {
 // HÀM XỬ LÝ LÕI (XUẤT RA CHO FILE INDEX.JS GỌI)
 // ============================================================================
 export async function processUserMessage(sessionId, userMessage, userId, userLocation = null) {
+    const redisKey = `chat_session:${sessionId}`;
+    let messages = [];
     try {
-        const redisKey = `chat_session:${sessionId}`; 
-        let messages = [];
-
         // --- BƯỚC 1: KÉO LỊCH SỬ & CẮT TỈA (SAFE TRIMMING) ---
         const storedHistory = await redisClient.get(redisKey);
         if (storedHistory) {
@@ -109,7 +108,7 @@ export async function processUserMessage(sessionId, userMessage, userId, userLoc
             if (messages.length > 31) {
                 const systemPrompt = messages[0]; 
                 let recentHistory = messages.slice(-30); 
-                while (recentHistory.length > 0 && recentHistory[0] instanceof ToolMessage) {
+                while (recentHistory.length > 0 && !(recentHistory[0] instanceof HumanMessage)) {
                     recentHistory.shift(); 
                 }
                 messages = [systemPrompt, ...recentHistory];
@@ -118,16 +117,21 @@ export async function processUserMessage(sessionId, userMessage, userId, userLoc
             messages = [new SystemMessage(SYSTEM_PROMPT)];
         }
 
-        // --- BƯỚC 2: NHỒI TỌA ĐỘ VÀO NGỮ CẢNH (LOCATION CONTEXT) ---
-        let locationContext = "";
-        if (userLocation && userLocation.lat && userLocation.lng) {
-            locationContext = `\n(Ngữ cảnh ẩn: Tọa độ GPS của khách là Lat: ${userLocation.lat}, Lng: ${userLocation.lng}. Hãy dùng nó cho các tool tìm rạp gần đây).`;
-        } else {
-            locationContext = `\n(Ngữ cảnh ẩn: Khách chưa cung cấp vị trí GPS. Nếu cần, hãy bảo khách bấm nút chia sẻ vị trí).`;
-        }
-        messages.push(new HumanMessage(userMessage + locationContext));
+        const now = new Date();
+        const dateVN = now.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        const isoDateVN = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' })).toISOString().split('T')[0];
 
-        console.log(`🤖 [Session: ${sessionId}] Đang phân tích ý định...`);
+        // --- BƯỚC 2: NHỒI TỌA ĐỘ VÀO NGỮ CẢNH (LOCATION CONTEXT) ---
+        let hiddenContext = `\n\n--- [GHI CHÚ TỪ HỆ THỐNG - ẨN VỚI NGƯỜI DÙNG] ---`;
+        if (userLocation && userLocation.lat && userLocation.lng) {
+            hiddenContext = `\n(Ngữ cảnh ẩn: Tọa độ GPS của khách là Lat: ${userLocation.lat}, Lng: ${userLocation.lng}. Hãy dùng nó cho các tool tìm rạp gần đây).`;
+        } else {
+            hiddenContext = `\n(Ngữ cảnh ẩn: Khách chưa cung cấp vị trí GPS. Nếu cần, hãy bảo khách bấm nút chia sẻ vị trí).`;
+        }
+        hiddenContext += `\n THỜI GIAN HIỆN TẠI LÀ: ${dateVN} (Định dạng: ${isoDateVN}). BẮT BUỘC dùng mốc thời gian này để tính toán. TUYỆT ĐỐI BỎ QUA mọi thông tin ngày tháng cũ trong lịch sử trò chuyện phía trên.`;
+        messages.push(new HumanMessage(userMessage + hiddenContext));
+
+        console.log(`[Session: ${sessionId}] Đang phân tích ý định...`);
 
         // --- BƯỚC 3: GỌI LLM LẦN 1 (CHỌN TOOL) ---
         const aiResponse = await llmWithTools.invoke(messages);
@@ -295,84 +299,40 @@ export async function processUserMessage(sessionId, userMessage, userId, userLoc
         };
 
     } catch (error) {
-        console.error("❌ Lỗi luồng AI:", error);
+        console.error("Lỗi luồng AI:", error.message || error);
+
+        // 1. KIỂM TRA LỖI NGHIỆP VỤ TỪ SPRING BOOT (400, 404)
+        if (error.response && error.response.data) {
+            const springBootMessage = error.response.data.message || error.response.data.error;
+            
+            if (springBootMessage) {
+                // --- CỰC KỲ QUAN TRỌNG: LƯU CÂU TRẢ LỜI NÀY VÀO LỊCH SỬ ---
+                // Ép câu thông báo lỗi này thành một tin nhắn của AI
+                messages.push(new AIMessage(springBootMessage));
+                
+                // Lưu lại vào Redis y hệt như Bước 6
+                // (Dùng try-catch lồng nhau đề phòng Redis sập mạng không làm hỏng luồng trả kết quả)
+                try {
+                    await redisClient.set(redisKey, JSON.stringify(serializeMessages(messages)), { EX: 86400 });
+                } catch (redisErr) {
+                    console.error("Lỗi lưu Redis khi bắt lỗi Spring Boot:", redisErr);
+                }
+
+                // Trả về cho Kotlin
+                return {
+                    status: "success", 
+                    content: springBootMessage, 
+                    ui_actions: []
+                };
+            }
+        }
+
+        // 2. NẾU LÀ LỖI HỆ THỐNG THẬT SỰ (Ví dụ: Đứt cáp quang, Gemini hết Quota)
+        // Lỗi này thì KHÔNG NÊN lưu vào Redis để tránh làm rác lịch sử hội thoại
         return {
             status: "error",
-            content: "Xin lỗi anh/chị, hệ thống đang gặp chút sự cố mạng. Vui lòng thử lại nhé!",
+            content: "Xin lỗi anh/chị, hệ thống đang bận xử lý quá nhiều yêu cầu. Vui lòng thử lại sau vài giây nhé!",
             ui_actions: []
         };
     }
 }
-
-// export async function processUserMessage(sessionId, userMessage, userId, userLocation = null) {
-//     try {
-//         const redisKey = `chat_session:${sessionId}`; 
-//         let messages = [];
-
-//         // --- BƯỚC 1: KÉO LỊCH SỬ ---
-//         const storedHistory = await redisClient.get(redisKey);
-//         if (storedHistory) {
-//             messages = deserializeMessages(JSON.parse(storedHistory));
-//             // Cắt tỉa nếu quá dài (Gemini chịu được 1 triệu token nhưng tiết kiệm vẫn tốt hơn)
-//             if (messages.length > 21) { 
-//                 messages = [messages[0], ...messages.slice(-20)]; 
-//             }
-//         } else {
-//             messages = [new SystemMessage(SYSTEM_PROMPT)];
-//         }
-
-//         // --- BƯỚC 2: THÊM TIN NHẮN NGƯỜI DÙNG ---
-//         // (Giữ nguyên logic thêm locationContext của bạn)
-//         const locationInfo = userLocation?.lat ? `(Vị trí khách: ${userLocation.lat}, ${userLocation.lng})` : "";
-//         messages.push(new HumanMessage(`${userMessage}\n${locationInfo}`));
-
-//         // --- BƯỚC 3: GỌI GEMINI LẦN 1 (CHỌN TOOL) ---
-//         const aiResponse = await llmWithTools.invoke(messages);
-//         messages.push(aiResponse);
-
-//         let uiActions = []; 
-
-//         // --- BƯỚC 4: THỰC THI TOOL (Vòng lặp switch-case của bạn giữ nguyên 100%) ---
-//         if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
-//             const toolResults = await Promise.all(
-//                 aiResponse.tool_calls.map(async (toolCall) => {
-//                     // ... Giữ nguyên toàn bộ logic switch(toolName) của bạn ...
-//                     // Ví dụ: const rawData = await springBootApi.searchMovies(args);
-                    
-//                     // LƯU Ý: ToolMessage của Gemini cần chính xác ID
-//                     return new ToolMessage({
-//                         tool_call_id: toolCall.id,
-//                         name: toolCall.name,
-//                         content: JSON.stringify(llmData) 
-//                     });
-//                 })
-//             );
-//             messages.push(...toolResults);
-
-//             // --- BƯỚC 5: GỌI GEMINI LẦN 2 (CHỐT CÂU TRẢ LỜI) ---
-//             const finalAiResponse = await llmWithTools.invoke(messages);
-//             messages.push(finalAiResponse);
-            
-//             // Lưu lại lịch sử vào Redis
-//             await redisClient.set(redisKey, JSON.stringify(serializeMessages(messages)), { EX: 86400 });
-
-//             return {
-//                 status: "success",
-//                 content: finalAiResponse.content,
-//                 ui_actions: uiActions
-//             };
-//         }
-
-//         // Trường hợp không gọi tool, trả về content bình thường
-//         return {
-//             status: "success",
-//             content: aiResponse.content,
-//             ui_actions: []
-//         };
-
-//     } catch (error) {
-//         // Xử lý lỗi Rate Limit của Gemini nếu có (thường là 429)
-//         console.error("❌ Lỗi Gemini:", error);
-//         return { status: "error", content: "Hệ thống bận, thử lại sau nhé!", ui_actions: [] };
-//     }
-// }

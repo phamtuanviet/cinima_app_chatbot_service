@@ -153,22 +153,24 @@ export const movieTools = [
     function: {
       name: "get_showtimes_by_movie",
       description:
-        "Tìm lịch chiếu phim. Có thể tìm theo tên phim kết hợp với địa điểm, tên rạp hoặc khu vực.",
+        "Dùng để tra cứu lịch chiếu của MỘT BỘ PHIM CỤ THỂ. LƯU Ý QUAN TRỌNG: Chỉ gọi tool này khi khách hàng ĐÃ CUNG CẤP TÊN PHIM (ví dụ: 'Lịch chiếu Interstellar', 'Mai chiếu ở đâu'). Nếu khách chỉ hỏi chung chung ('Hôm nay rạp chiếu phim gì'), hãy dùng tool get_now_playing thay thế.",
       parameters: {
         type: "object",
         properties: {
           movieTitle: {
             type: "string",
-            description: "Tên phim.",
+            description:
+              "Tên bộ phim khách hàng muốn xem. Hãy trích xuất tên phim thật chính xác từ câu nói của khách, không bao gồm các từ ngữ cảm thán.",
           },
           date: {
             type: "string",
-            description: "Định dạng YYYY-MM-DD.",
+            description:
+              "Thời gian khách muốn xem phim. NẾU khách chỉ nói ngày: BẮT BUỘC trả về định dạng 'YYYY-MM-DD' (VD: 2026-04-05). NẾU khách nhắc đến CẢ NGÀY VÀ GIỜ (VD: '8h tối nay'): BẮT BUỘC trả về định dạng ISO 8601 'YYYY-MM-DDTHH:mm:ss' (VD: 2026-04-05T20:00:00). Phải tính toán chính xác dựa vào mốc THỜI GIAN HIỆN TẠI trong Ngữ cảnh ẩn. NẾU khách KHÔNG nhắc đến thời gian, BẮT BUỘC ĐỂ TRỐNG (null).",
           },
           locationQuery: {
             type: "string",
             description:
-              "Thông tin về rạp, khu vực hoặc thành phố (ví dụ: 'CGV', 'Cầu Giấy', 'Hà Nội').",
+              "Thông tin khu vực, quận/huyện, thành phố hoặc tên rạp cụ thể (ví dụ: 'Hà Đông', 'Cầu Giấy', 'Hà Nội'). NẾU khách hàng KHÔNG nhắc đến địa điểm, BẮT BUỘC ĐỂ TRỐNG (null) trường này, tuyệt đối không tự đoán vị trí.",
           },
         },
         required: ["movieTitle"],
@@ -192,7 +194,7 @@ export const movieTools = [
           date: {
             type: "string",
             description:
-              "Ngày muốn xem phim. Định dạng 'YYYY-MM-DD'. Nếu người dùng nói 'hôm nay', 'ngày mai', hãy tự tính toán ra ngày chính xác. Bỏ trống nếu không được nhắc đến.",
+              "Thời gian khách muốn xem phim. NẾU khách chỉ nói ngày: BẮT BUỘC trả về định dạng 'YYYY-MM-DD' (VD: 2026-04-05). NẾU khách nhắc đến CẢ NGÀY VÀ GIỜ (VD: '8h tối nay'): BẮT BUỘC trả về định dạng ISO 8601 'YYYY-MM-DDTHH:mm:ss' (VD: 2026-04-05T20:00:00). Phải tính toán chính xác dựa vào mốc THỜI GIAN HIỆN TẠI trong Ngữ cảnh ẩn. NẾU khách KHÔNG nhắc đến thời gian, BẮT BUỘC ĐỂ TRỐNG (null).",
           },
         },
         required: ["locationQuery"],

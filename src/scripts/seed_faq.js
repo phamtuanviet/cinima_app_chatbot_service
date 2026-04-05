@@ -58,13 +58,13 @@ async function runIngestion() {
     const table = await db.createTable(tableName, data);
 
     console.log("-----------------------------------------");
-    console.log("✅ HOÀN THÀNH!");
+    console.log("HOÀN THÀNH!");
     console.log("Tables:", await db.tableNames());
     console.log(`Vectors stored: ${data.length}`);
     console.log("-----------------------------------------");
 
   } catch (error) {
-    console.error("❌ LỖI:", error);
+    console.error("LỖI:", error);
   }
 }
 

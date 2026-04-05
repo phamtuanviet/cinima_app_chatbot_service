@@ -25,14 +25,21 @@ async function safeGet(endpoint, params = {}, userId = null) {
             config.headers = { 'X-User-Id': userId };
         }
         
-        console.log(`📡 [Spring Boot] GET ${endpoint} | Params:`, params);
+        console.log(`[Spring Boot] GET ${endpoint} | Params:`, params);
         const response = await apiClient.get(endpoint, config);
         return response.data;
     } catch (error) {
-        console.error(`❌ Lỗi API [${endpoint}]:`, error.message);
-        return { 
-            error: "Hệ thống rạp chiếu phim đang phản hồi chậm. Hãy xin lỗi khách hàng và hẹn thử lại sau." 
-        };
+        console.error(`Lỗi API [${endpoint}]:`, error.message);
+        
+        // 1. NẾU LÀ LỖI TỪ SPRING BOOT (400, 404)
+        // Bắt buộc phải QUĂNG NGƯỢC (throw) cái error này lên cho chatService.js xử lý
+        if (error.response && error.response.data) {
+            throw error; 
+        }
+        
+        // 2. NẾU LÀ LỖI SẬP MẠNG HOẶC MẤT KẾT NỐI (Không có response từ server)
+        // Cũng phải throw ra một Error object để Promise.all biết là tool bị lỗi
+        throw new Error("Hệ thống rạp chiếu phim đang gặp sự cố mạng. Hãy xin lỗi khách hàng và hẹn thử lại sau.");
     }
 }
 
@@ -61,7 +68,7 @@ export const getShowtimesByMovie = (args) =>
     safeGet('/api/chatbot/showtimes', args);
 
 export const getShowtimesByCinema = (args) => 
-    safeGet('/api/chatbot/cinemas/showtimes', args);
+    safeGet('/api/chatbot/showtimes', args);
 
 export const getCinemasNearby = (args) => 
     safeGet('/api/chatbot/cinemas/nearby', args);
@@ -73,15 +80,15 @@ export const getCinemasNearby = (args) =>
 
 export const getMyPoints = (args, userId) => {
     if (!userId) return { error: "Vui lòng đăng nhập để tra cứu điểm." };
-    return safeGet('/api/chatbot/users/me/points', args, userId);
+    return safeGet('/api/chatbot/me/points', args, userId);
 };
 
 export const getBookingHistory = (args, userId) => {
     if (!userId) return { error: "Vui lòng đăng nhập để xem lịch sử đặt vé." };
-    return safeGet('/api/chatbot/users/me/bookings', args, userId);
+    return safeGet('/api/chatbot/me/bookings', args, userId);
 };
 
 export const getMyVouchers = (args, userId) => {
     if (!userId) return { error: "Vui lòng đăng nhập để xem kho voucher." };
-    return safeGet('/api/chatbot/vouchers/me', args, userId);
+    return safeGet('/api/chatbot/me/vouchers', args, userId);
 };

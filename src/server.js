@@ -5,21 +5,6 @@ import { processUserMessage } from './services/chatService.js';
 
 dotenv.config();
 
-// import OpenAI from "openai";
-// import dotenv from "dotenv";
-
-// dotenv.config();
-// const client = new OpenAI({
-//     apiKey: process.env.GROQ_API_KEY,
-//     baseURL: "https://api.groq.com/openai/v1",
-// });
-
-// const response = await client.responses.create({
-//     model: "openai/gpt-oss-20b",
-//     input: "Explain the importance of fast language models",
-// });
-// console.log(response.output_text);
-
 const app = express();
 app.use(express.json());
 
@@ -44,5 +29,5 @@ app.post('/api/chat', verifyToken, async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 ChatService đang chạy tại http://localhost:${PORT}`);
+    console.log(`ChatService đang chạy tại http://localhost:${PORT}`);
 });
